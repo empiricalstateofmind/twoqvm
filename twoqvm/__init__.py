@@ -136,16 +136,16 @@ class FiniteMethods(object):
         self.x = (self.rho[0]*self.s[0], self.rho[1]*self.s[1]) 
         self.dx = 1.0/self.N
 
-        if max_iterations is not None:
+        if self.max_iterations is not None:
             self.x1_track = np.zeros(max_iterations)
             self.x1_track[self.t] = self.x[0]
             self.x2_track = np.zeros(max_iterations)
             self.x1_track[self.t] = self.x[1]
-            self.update = _array_update
+            self.update = self._array_update
         else:
             self.x1_track = [self.x[0]]
             self.x2_track = [self.x[1]]
-            self.update = _append_update
+            self.update = self._append_update
         self._set_transition_matrix()
 
         return None
@@ -480,7 +480,7 @@ class FiniteMethods(object):
             self.x1_track = np.array(self.x1_track)*self.N + 0.5
             self.x2_track = np.array(self.x2_track)*self.N + 0.5
 
-            df = pd.DataFrame({'t':np.arange(len(self.x1_track), 'x1':self.x1_track, 'x2':self.x2_track}, dtype=int)
+            df = pd.DataFrame({'t': np.arange(len(self.x1_track)), 'x1': self.x1_track, 'x2': self.x2_track}, dtype=int)
             df.to_csv("{}.csv".format(filename), index=False)
         return None
 

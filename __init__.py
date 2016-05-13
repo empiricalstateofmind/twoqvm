@@ -6,7 +6,7 @@ from scipy.linalg import eigvals
 
 # TO DO
 # 1. TESTS
-# 2. Switching Dynamics
+# 2. Switching Dynamics Theory
 
 
 class InfiniteMethods(object):
@@ -482,7 +482,35 @@ class FiniteMethods(object):
 
             df = pd.DataFrame({'t':np.arange(len(self.x1_track), 'x1':self.x1_track, 'x2':self.x2_track}, dtype=int)
             df.to_csv("{}.csv".format(filename), index=False)
-        return None 
+        return None
+
+    def switching_time(self, xi, lb=None, ub=None):
+        """
+        Calculates the mean switching time of a species between two values.
+
+        Args:
+            xi (binary) - which species to consider the switching of, 0 for x1, 1 for x2.
+            lb (float) - lower value
+            up (float) - upper value 
+
+        Returns:
+            time (float) - mean switching time.
+
+        Note:
+            1. If either lb or ub are not prescribed then the switching time between the fixed points is calculated.
+            2. Some systems have only 1 fixed point so the switching time calculation is unsuitable.
+        """
+
+        if lb is None or ub is None:
+            fps = self.fixed_points()
+            lb, ub = fps[0][xi], fps[-1][xi]
+
+        if xi == 0:
+            return switching_time(self.x1_track, lb, ub) 
+        elif xi == 1:
+            return switching_time(self.x2_track, lb, ub) 
+        else:
+            raise Exception("xi must be 0 (for x1), or 1 (for x2).")
 
 class TwoQVoterModel(FiniteMethods, InfiniteMethods):
     """ A class for simulation and analysis of the finite 2qVMZ. """
@@ -560,3 +588,30 @@ class InfiniteTwoQVoterModel(InfiniteMethods):
 
         assert 1 == sum(self.z) + sum(self.s)
         return None
+
+
+def switching_time(arr, a1):
+    """
+    Calculates the mean switching time of an array between two values.
+
+    Measures the time taken, on average, for the process to move from the lower value
+    to the upper.
+
+    Args:
+        arr (np.array) -
+        a1 (float) - lower value
+        a2 (float) - upper value 
+
+    Returns:
+        time (float) - mean switching time.
+    """
+    values = ((a >= a2).astype(int) - (a <= a1).astype(int))
+    sign = np.sign(values)
+    sz = (sign==0)
+    while sz.any():
+        sign[sz] = np.roll(sign,1)[sz]
+        sz = (sign==0)
+
+    signchange = ((np.roll(sign,1) - sign) != 0).astype(int)
+    signchange[0] = 0
+    return len(a)/signchange.sum()

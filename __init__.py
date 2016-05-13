@@ -1,18 +1,17 @@
 import numpy as np
+import pandas as pd
 from numpy import sqrt, exp
 from scipy.optimize import brentq
 from scipy.linalg import eigvals
 
 # TO DO
 # 1. Add ability to fix the number of iterations (reduce append load when doing large sims)
-# 2. Add the stationary distribution functions
-# 3. Add helper functions - to CSV e.t.c
-# 4. TESTS
+# 2. TESTS
 
 
-class MeanfieldMethods(object):
+class InfiniteMethods(object):
     """ 
-    Abstract container for all methods associated with the meanfield. 
+    Abstract container for all methods associated with the infinite model. 
 
     Methods:
         fixed_points() - Returns the fixed points of the system.
@@ -274,8 +273,192 @@ class FiniteMethods(object):
         
         return np.array(t_range), -np.array(ang_mo)
 
+    def angular_velocity(self, t, sample_size, deviations=True):
+        """ 
+        Calculates the angular velocity for a given t.
 
-class TwoQVoterModel(FiniteMethods, MeanfieldMethods):
+        This is given by the correlation <x1(s)x2(s+t)> - <x1(s+t)x2(s)>.
+        The equivalent can be derived for the deviations from the mean.
+
+        Args:
+            t (int) - Time difference which correlation is calculated over.
+            sample_size - The number of samples used to average over (max = number of iterations - sample_size - t).
+            deviations (bool) - If True, use the deviations from the mean rather than true values.
+
+        Note:
+            This method will convert xi_track to a numpy array (and possibly subtract the mean which would be irreversible).
+        """
+
+        self.x1_track = np.array(self.x1_track)
+        self.x2_track = np.array(self.x2_track)
+        if deviations:
+            self.x1_track = self.x1_track - self.x1_track.mean()
+            self.x2_track = self.x2_track - self.x2_track.mean()
+
+        angvec = self.x1_track[:sample_size]*self.x2_track[t:sample_size+t] - self.x1_track[t:sample_size+t]*self.x2_track[:sample_size]
+        return angvec.mean(), angvec.std()
+
+    def _generate_transition_matrix(self, sparse=False):
+        """
+        Generates the transition matrix for the dynamics. 
+
+        Args:
+            sparse (bool) -
+
+        Returns:
+            P - 
+        """
+    
+        S1, S2 = self.S[0], self.S[1]
+        
+        if sparse:
+            import scipy.sparse as sp
+            P = sp.dok_matrix(((S1+1)**2, (S2+1)**2), dtype=np.float)
+        else:
+            P = np.zeros(shape=((S1+1)**2, (S2+1)**2))
+            
+        for i in range((S1+1)**2):
+            for j in range((S2+1)**2):
+                X1, X2 = self.convert_to_x_pair(i, S1, S2)
+                Y1, Y2 = self.convert_to_x_pair(j, S1, S2)
+                if X1 + 1 == Y1 and X2 == Y2:
+                    P[i, j] = self._w_1_plus(X1, X2)
+                elif X1 - 1 == Y1 and X2 == Y2:
+                    P[i, j] = self._w_1_minus(X1, X2)
+                elif X2 + 1 == Y2 and X1 == Y1:
+                    P[i, j] = self._w_2_plus(X1, X2)
+                elif X2 - 1 == Y2 and X1 == Y1:
+                    P[i, j] = self._w_2_minus(X1, X2)
+        
+        for i, val in enumerate(1 - P.sum(axis=1)):
+            P[i, i] = val
+            
+        return P
+    
+    def calculate_stationary_distribution(self, iterations=2, x=None, filename=False, sparse=False):
+        """Calculates the stationary distribution of the model.
+
+        Args:
+            iterations (int) - 
+            x - 
+            filename - 
+            sparse - 
+
+        Returns:
+            X
+        """
+
+        P = self._generate_transition_matrix(sparse)
+        
+        if x is None:
+            x = np.ones((1, (self.S[0]+1)*(self.S[1]+1)))
+
+        if sparse:
+            X = (x*(P**(2**iterations))).reshape((self.S[0]+1, self.S[1]+1))
+        else:
+            X = (x.dot(matrix_power(P, 2**iterations))).reshape((self.S[0]+1, self.S[1]+1))
+        
+        X = X/X.sum()
+              
+        if filename:
+            if self.S[0] == self.S[1] and self.Z[1] == self.Z[0]:
+                np.savez(filename+'stat_{}N_{}S_{}Z_{}{}.npz'.format(self.N, self.S[0], self.Z[0], self.q[0], self.q[1]), X=X)
+            elif self.S[0] == self.S[1]:
+                np.savez(filename+'stat_{}N_{}S_{}Zp_{}Zm_{}{}.npz'.format(self.N, self.S[0], self.Z[1], self.Z[0], self.q[0], self.q[1]), X=X)
+            else:
+                np.savez(filename+'stat_{}N_{}S1_{}S2_{}Zp_{}Zm_{}{}.npz'.format(self.N, self.S[0], self.S[1], self.Z[1], self.Z[0], self.q[0], self.q[1]), X=X)
+
+        self.X = X
+        return X
+
+    def calculate_stationary_currents(self, iterations, filename=None):
+        """
+        Calculates the stationary probability currents.
+
+        Args:
+            iterations -
+            filename - 
+
+        Returns:
+            C -
+        """
+
+        if filename is not None:
+            self.X = np.load(filename)['X']
+        elif not hasattr(self, 'X'):
+            x = np.ones((self.S[0]+1, self.S[1]+1))/((self.S[0]+1)*(self.S[1]+1))
+            self.X = self.calculate_stationary_distribution(iterations, x=x.flatten())[2]
+
+        return np.array(np.fromfunction(self.current, shape=self.X.shape, dtype=int, P=self.X))
+ 
+    def _w_1_plus(self, X1, X2):
+        """Probability current of x1 -> x1 + 1."""
+        x1 = X1/self.N
+        x2 = X2/self.N
+        return (self.s[0] - x1)*(self.z[1] + x1 + x2)**self.q[0]
+
+    def _w_1_minus(self, X1, X2):
+        """Probability current of x1 -> x1 - 1."""
+        x1 = X1/self.N
+        x2 = X2/self.N
+        return (x1)*(1 - self.z[1] - x1 - x2)**self.q[0]
+
+    def _w_2_plus(self, X1, X2):
+        """Probability current of x2 -> x2 + 1."""
+        x1 = X1/self.N
+        x2 = X2/self.N
+        return (self.s[1] - x2)*(self.z[1] + x1 + x2)**self.q[1]
+
+    def _w_2_minus(self, X1, X2):
+        """Probability current of x2 -> x2 - 1."""
+        x1 = X1/self.N
+        x2 = X2/self.N
+        return (x2)*(1 - self.z[1] - x1 - x2)**self.q[1]
+
+    def convert_to_x_pair(self, i, S1, S2):
+        """ """
+        return i//(S1+1), i % (S1+1) 
+
+    def current(self, X1, X2, P):
+        """ """
+        return (-(self._w_1_plus(X1, X2) - self._w_1_minus(X1, X2))*P[X1, X2], 
+                (self._w_2_plus(X1, X2) - self._w_2_minus(X1, X2))*P[X1, X2])
+
+    def save_timeseries(self, filename=None, compressed=True):
+        """
+        Saves the timeseries (and parameter values) to file.
+
+        Args:
+            filename (str) - 
+            compressed (bool) -
+
+        Returns:
+            None
+        """
+
+        parameters = dict(N=self.N,
+                          S1=self.S[0],
+                          S2=self.S[1],
+                          ZM=self.Z[0],
+                          ZP=self.Z[1],
+                          q1=self.q[0],
+                          q2=self.q[1])
+ 
+        if filename is None:
+            filename = "{N}N_{S1}S1_{S2}S2_{ZM}ZM_{ZP}ZP_{q1}{q2}".format(**parameters)
+
+        if compressed:
+            np.savez_compressed("{}.npz".format(filename), x1_track=self.x1_track, x2_track=self.x2_track,
+                                parameters=parameters)   
+        else:
+            self.x1_track = np.array(self.x1_track)*self.N + 0.5
+            self.x2_track = np.array(self.x2_track)*self.N + 0.5
+
+            df = pd.DataFrame({'t':np.arange(len(self.x1_track), 'x1':self.x1_track, 'x2':self.x2_track}, dtype=int)
+            df.to_csv("{}.csv".format(filename), index=False)
+        return None 
+
+class TwoQVoterModel(FiniteMethods, InfiniteMethods):
     """ A class for simulation and analysis of the finite 2qVMZ. """
 
     def __init__(self, N, Z, S, q, rho, *args, **kwargs):
@@ -318,7 +501,7 @@ class TwoQVoterModel(FiniteMethods, MeanfieldMethods):
         return None
 
 
-class MeanfieldTwoQVoterModel(MeanfieldMethods):
+class InfiniteTwoQVoterModel(InfiniteMethods):
     """ A class for simulation and analysis of the infinite 2qVMZ. """
 
     def __init__(self, z, s, q):
@@ -345,117 +528,3 @@ class MeanfieldTwoQVoterModel(MeanfieldMethods):
 
         assert 1 == sum(self.z) + sum(self.s)
         return None
-
-                
-            #     def angular_velocity(self, t, T, burn=10000):
-            #         angvec = [self.x1_track[tau]*self.x2_track[tau+t] - self.x1_track[tau+t]*self.x2_track[tau] for tau in range(burn,burn+T-t)] 
-            #         angvec = sum(angvec)/(T-t)
-            #         return angvec
-
-            #     def save_timeseries(self, filename, compressed=True):
-            #         parameters = dict(N=self.N, zp=self.zp, zm=self.zm, s1=self.s1, s2=self.s2, q1=self.q1, q2=self.q2, rho=self.rho)
-                    
-            #         if compressed:
-            #             np.savez_compressed("{}.npz".format(filename), x1_track=self.x1_track, x2_track=self.x2_track,
-            #                                 parameters=parameters)
-                        
-            #         else:
-            #             df = pd.DataFrame({'x1':self.x1_track, 'x2':self.x2_track})
-            #             df.to_csv("{}.csv".format(filename), index=False)
-            #         return None 
-                
-            #     def generate_transition_matrix(self, sparse=False):
-            #         """ Generates the transition matrix for the dynamics """
-                
-            #         S1, S2 = self.S1, self.S2
-                    
-            #         if sparse:
-            #             import scipy.sparse as sp
-            #             P = sp.dok_matrix(((S1+1)**2,(S2+1)**2), dtype=np.float)
-            #         else:
-            #             P = np.zeros(shape=((S1+1)**2,(S2+1)**2))
-                        
-            #         for i in range((S1+1)**2):
-            #             for j in range((S2+1)**2):
-            #                 X1,X2 = self.convert_to_x_pair(i, S1, S2)
-            #                 Y1,Y2 = self.convert_to_x_pair(j, S1, S2)
-            #                 if X1 + 1 == Y1 and X2 == Y2:
-            #                     P[i,j] = self.w_1_plus(X1, X2)
-            #                 elif X1 - 1 == Y1 and X2 == Y2:
-            #                     P[i,j] = self.w_1_minus(X1, X2)
-            #                 elif X2 + 1 == Y2 and X1 == Y1:
-            #                     P[i,j] = self.w_2_plus(X1, X2)
-            #                 elif X2 - 1 == Y2 and X1 == Y1:
-            #                     P[i,j] = self.w_2_minus(X1, X2)
-                    
-            #         for i,val in enumerate(1 - P.sum(axis=1)):
-            #             P[i,i] = val
-                        
-            #         return P
-                
-            #     def calculate_stationary_distribution(self, iterations=2, x=None, filename=False, sparse=False):
-            #         """ Calculates the stationary distribution of the model. """
-
-            #         P = self.generate_transition_matrix(sparse)
-                    
-            #         if x is None:
-            #             x = np.ones((1, (self.S1+1)*(self.S2+1)))
-
-            #         if sparse:
-            #             X = (x*(P**(2**iterations))).reshape((self.S1+1,self.S2+1))
-            #         else:
-            #             X = (x.dot(matrix_power(P, 2**iterations))).reshape((self.S1+1,self.S2+1))
-                    
-            #         X = X/X.sum()
-                                                   
-            #         x1_dist = X.sum(axis=1)
-            #         x2_dist = X.sum(axis=0).T
-                          
-            #         if filename:
-            #             if self.S1==self.S2 and self.Zp == self.Zm:
-            #                 np.savez(filename+'stat_{}N_{}S_{}Z_{}{}.npz'.format(self.N, self.S1, self.Zm, self.q1, self.q2), X=X)
-            #             elif self.S1==self.S2:
-            #                 np.savez(filename+'stat_{}N_{}S_{}Zp_{}Zm_{}{}.npz'.format(self.N, self.S1, self.Zp, self.Zm, self.q1, self.q2), X=X)
-            #             else:
-            #                 np.savez(filename+'stat_{}N_{}S1_{}S2_{}Zp_{}Zm_{}{}.npz'.format(self.N, self.S1, self.S2, self.Zp, self.Zm, self.q1, self.q2), X=X)
-
-            #         self.X = X
-            #         return x1_dist, x2_dist, X
-
-            #     def calculate_stationary_currents(self, iterations, filename=None):
-            #         """"""
-
-            #         if filename is not None:
-            #             self.X = np.load(filename)['X']
-            #         elif not hasattr(self, 'X'):
-            #             x = np.ones((self.S1+1, self.S2+1))/((self.S1+1)*(self.S2+1))
-            #             self.X = self.calculate_stationary_distribution(iterations, x=x.flatten())[2]
-
-            #         return np.array(np.fromfunction(self.current, shape=self.X.shape, dtype=int, P=self.X))
-             
-            #     def w_1_plus(self, X1, X2):
-            #         x1=X1/self.N
-            #         x2=X2/self.N
-            #         return (self.s1 - x1)*(self.zp + x1 + x2)**self.q1
-
-            #     def w_1_minus(self, X1, X2):
-            #         x1=X1/self.N
-            #         x2=X2/self.N
-            #         return (x1)*(1 - self.zp - x1 - x2)**self.q1
-
-            #     def w_2_plus(self, X1, X2):
-            #         x1=X1/self.N
-            #         x2=X2/self.N
-            #         return (self.s2 - x2)*(self.zp + x1 + x2)**self.q2
-
-            #     def w_2_minus(self, X1, X2):
-            #         x1=X1/self.N
-            #         x2=X2/self.N
-            #         return (x2)*(1 - self.zp - x1 - x2)**self.q2
-
-            #     def convert_to_x_pair(self, i, S1, S2):
-            #         return i//(S1+1),i%(S1+1) 
-
-            #     def current(self, X1, X2, P):
-            #         return (-(self.w_1_plus(X1, X2) - self.w_1_minus(X1, X2))*P[X1,X2], 
-            #                 (self.w_2_plus(X1, X2) - self.w_2_minus(X1, X2))*P[X1,X2])

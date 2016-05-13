@@ -5,8 +5,8 @@ from scipy.optimize import brentq
 from scipy.linalg import eigvals
 
 # TO DO
-# 1. Add ability to fix the number of iterations (reduce append load when doing large sims)
-# 2. TESTS
+# 1. TESTS
+# 2. Switching Dynamics
 
 
 class InfiniteMethods(object):
@@ -128,15 +128,42 @@ class FiniteMethods(object):
             None
         """
         
+        self.t = 0
+
         self.s = (self.S[0]/self.N, self.S[1]/self.N)
         self.z = (self.Z[0]/self.N, self.Z[1]/self.N)
             
         self.x = (self.rho[0]*self.s[0], self.rho[1]*self.s[1]) 
         self.dx = 1.0/self.N
-        self.x1_track = [self.x[0]]
-        self.x2_track = [self.x[1]]
+
+        if max_iterations is not None:
+            self.x1_track = np.zeros(max_iterations)
+            self.x1_track[self.t] = self.x[0]
+            self.x2_track = np.zeros(max_iterations)
+            self.x1_track[self.t] = self.x[1]
+            self.update = _array_update
+        else:
+            self.x1_track = [self.x[0]]
+            self.x2_track = [self.x[1]]
+            self.update = _append_update
         self._set_transition_matrix()
-        self.t = 0
+
+        return None
+
+    def _append_update(self, xi, val):
+        """Updates the simulation history by list update."""
+        if xi == 0:
+            self.x1_track.append(val)
+        elif xi == 1:
+            self.x2_track.append(val)
+        return None
+
+    def _array_update(self, xi, val):
+        """Updates the simulation history by array update."""
+        if xi == 0:
+            self.x1_track[self.t] = val
+        elif xi == 1:
+            self.x2_track[self.t] = val
         return None
 
     def _set_transition_matrix(self):
@@ -149,8 +176,7 @@ class FiniteMethods(object):
         Returns:
             None
         """
-
-        self.x = (self.x1_track[-1], self.x2_track[-1])
+        self.x = (self.x1_track[self.t], self.x2_track[self.t])
 
         mu1 = self.z[0]+self.s[0]+self.s[1]-(self.x[0]+self.x[1])
         mu2 = self.z[1]+self.x[0]+self.x[1]
@@ -174,25 +200,25 @@ class FiniteMethods(object):
         r1 = np.random.random()
         cumsum = np.cumsum(self.Tr)
         ix = np.searchsorted(cumsum, r1)
+        self.t += 1
         
         if ix == 0:
-            self.x1_track.append(self.x1_track[-1] + self.dx)
-            self.x2_track.append(self.x2_track[-1])
+            self.update(0, self.x1_track[self.t-1] + self.dx)
+            self.update(1, self.x2_track[self.t-1])
         elif ix == 1:
-            self.x1_track.append(self.x1_track[-1] - self.dx)
-            self.x2_track.append(self.x2_track[-1])
+            self.update(0, self.x1_track[self.t-1] - self.dx)
+            self.update(1, self.x2_track[self.t-1])
         elif ix == 2:
-            self.x1_track.append(self.x1_track[-1])
-            self.x2_track.append(self.x2_track[-1] + self.dx)
+            self.update(0, self.x1_track[self.t-1])
+            self.update(1, self.x2_track[self.t-1] + self.dx)
         elif ix == 3:
-            self.x1_track.append(self.x1_track[-1])
-            self.x2_track.append(self.x2_track[-1] - self.dx)
+            self.update(0, self.x1_track[self.t-1])
+            self.update(1, self.x2_track[self.t-1] - self.dx)
         else:
-            self.x1_track.append(self.x1_track[-1])
-            self.x2_track.append(self.x2_track[-1])
+            self.update(0, self.x1_track[self.t-1])
+            self.update(1, self.x2_track[self.t-1])
         
         self._set_transition_matrix()
-        self.t += 1
         return None
 
     def run_iterations(self, num_iterations, verbose=False):
@@ -227,7 +253,7 @@ class FiniteMethods(object):
         D = np.array([[w1/self.N, 0],
                       [0, w2/self.N]])
         return D
-    
+
     @property
     def C(self):
         """
@@ -474,9 +500,11 @@ class TwoQVoterModel(FiniteMethods, InfiniteMethods):
             q (tuple) - The (q1,q2) agent confidence parameters.
             rho (float/tuple) - The initial fraction of positive susceptibles for S1, S2 respectively.
                                 If a float is provided then this density is applied across both groups.
+            max_iterations (int) - The maximum number of iterations that will be run.
 
         Note: 
-            For the qVMZ, set S2 = 0. Setting S1 = 0 will not work.
+            1. For the qVMZ, set S2 = 0. Setting S1 = 0 will not work.
+            2. max_iterations solves memory issues and saves computational effect for longer runs.
         """
         self.N = N
         for key, var in zip(['Z', 'S', 'q'], [Z, S, q]):
@@ -496,6 +524,10 @@ class TwoQVoterModel(FiniteMethods, InfiniteMethods):
             assert (rho[0] >= 0) & (rho[0] <= 1)
             assert (rho[1] >= 0) & (rho[1] <= 1) 
             self.rho = rho
+
+        self.max_iterations = None
+        for key, val in kwargs.items():
+            setattr(self, key, val)
 
         self._simulation_setup()
         return None

@@ -137,9 +137,9 @@ class FiniteMethods(object):
         self.dx = 1.0/self.N
 
         if self.max_iterations is not None:
-            self.x1_track = np.zeros(max_iterations)
+            self.x1_track = np.zeros(self.max_iterations, dtype=float)
             self.x1_track[self.t] = self.x[0]
-            self.x2_track = np.zeros(max_iterations)
+            self.x2_track = np.zeros(self.max_iterations, dtype=float)
             self.x1_track[self.t] = self.x[1]
             self.update = self._array_update
         else:

@@ -125,7 +125,9 @@ class InfiniteMethods(object):
 
 
 class FiniteMethods(object):
-    """ Abstract container for all methods associated with the finite model. """
+    """
+    Abstract container for all methods associated with the finite model.
+    """
 
     def _simulation_setup(self):
         """ 
@@ -162,6 +164,36 @@ class FiniteMethods(object):
             self.update = self._append_update
         self._set_transition_matrix()
 
+        return None
+
+    def load_timeseries(self, filename, var_names=('x1_track', 'x2_track')):
+        """
+        Loads a timeseries from file.
+
+        Args:
+            filename (str) - 
+            var_names (str tuple) -
+
+        Returns:
+            None
+        """
+        data = np.load(filename)
+        self.x1_track, self.x2_track = data[var_names[0]], data[var_names[0]]
+        return None
+
+    def load_stationary_distribution(self, filename, var_name='X'):
+        """
+        Loads a stationary distribution from file.
+
+        Args:
+            filename (str) - 
+            var_name (str) -
+
+        Returns:
+            None
+        """
+        data = np.load(filename)
+        self.X = data[var_names]
         return None
 
     def _append_update(self, xi, val):
@@ -632,7 +664,7 @@ class InfiniteTwoQVoterModel(InfiniteMethods):
         return None
 
 
-def switching_time(arr, a1):
+def switching_time(arr, a1, a2):
     """
     Calculates the mean switching time of an array between two values.
 
@@ -647,7 +679,7 @@ def switching_time(arr, a1):
     Returns:
         time (float) - mean switching time.
     """
-    values = ((a >= a2).astype(int) - (a <= a1).astype(int))
+    values = ((arr >= a2).astype(int) - (arr <= a1).astype(int))
     sign = np.sign(values)
     sz = (sign == 0)
     while sz.any():
@@ -656,12 +688,12 @@ def switching_time(arr, a1):
 
     signchange = ((np.roll(sign, 1) - sign) != 0).astype(int)
     signchange[0] = 0
-    return len(a)/signchange.sum()
+    return len(arr)/signchange.sum()
 
 
-def switching_time_dist(a, a1, a2):
+def switching_time_dist(arr, a1, a2):
     """
-    Returns the switching time distribution for an array a between two values.
+    Returns the switching time distribution for an array arr between two values.
 
     Args:
         arr (np.array) -
@@ -671,14 +703,13 @@ def switching_time_dist(a, a1, a2):
     Returns:
         dist (np.array) - an array of switching times
     """
-    
-    values = ((a >= a2).astype(int) - (a <= a1).astype(int)) # Find times
+    values = ((arr >= a2).astype(int) - (arr <= a1).astype(int)) # Find times
 
     asign = np.sign(values) # Get sign of values (+1 above a2, -1 below a1)
-    sz = (asign==0) # Find intermediate values
+    sz = (asign == 0) # Find intermediate values
     while sz.any():
         asign[sz] = np.roll(asign,1)[sz] # Intermediate values get replaced with what preceeded it.
-        sz = (asign==0)
+        sz = (asign == 0)
 
     signchange = ((np.roll(asign,1) - asign) != 0).astype(int) # Look for sign changes
     
@@ -693,25 +724,25 @@ def switching_time_dist(a, a1, a2):
                                         [True])))[0])[::2]
     return np.concatenate([tops, bottoms])
 
-def _zero_runs(a):
+def _zero_runs(arr):
     """
     Returns the indices of the start and end of a run of zeros of an array.
 
     Args:
-        a (np.array) - 
+        arr (np.array) - 
 
     Returns:
-        ranges (np.ndarray) - indices pairs to mark the start and end of a run of zeros in a.
+        ranges (np.ndarray) - indices pairs to mark the start and end of a run of zeros in arr.
     """
     
     # Creates an array which is 1 where a=0, and pads the ends with a 0.
-    iszero = np.concatenate(([0], np.equal(a,0).view(np.int8), [0])) 
+    iszero = np.concatenate(([0], np.equal(arr, 0).view(np.int8), [0])) 
     absdiff = np.abs(np.diff(iszero))
     
     ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
     return ranges
 
-def switching_points(a, a1, a2):
+def switching_points(arr, a1, a2):
     """Returns indices pairs of the transitional periods of a between two values.
 
     Args:
@@ -722,7 +753,7 @@ def switching_points(a, a1, a2):
     Returns:
         swpoints (np.ndarray) - indices pairs to mark the start and end of a switch from a1 to a2.
     """
-    values = ((a >= a2).astype(int) - (a <= a1).astype(int))
+    values = ((arr >= a2).astype(int) - (arr <= a1).astype(int))
     zeros = _zero_runs(values)
 
     swpoints = zeros[np.abs(values[zeros[:, 0]-1] - values[zeros[:, 1]+1]) == 2]
@@ -738,7 +769,7 @@ def angular_velocity(x1, x2, t, sample_size, deviations=True):
     Args:
         x1, x2 (np.array) - Timeseries for x1, x2.
         t (int) - Time difference which correlation is calculated over.
-        sample_size - The number of samples used to average over (max = number of iterations - sample_size - t).
+        sample_size - The number of samples used to average over (max = max(len(x1),len(x2)) - sample_size - t).
         deviations (bool) - If True, use the deviations from the mean rather than true values.
     """
 

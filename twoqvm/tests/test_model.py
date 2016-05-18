@@ -31,8 +31,8 @@ class TestFiniteModelConstruction(TestCase):
 		model = TwoQVoterModel(N=100, S=(25,25), Z=(25,25), q=(1,2), rho=0.5, max_iterations=100)
 		self.assertIsInstance(model.x1_track, np.ndarray)
 		self.assertIsInstance(model.x2_track, np.ndarray)
-		self.assertTrue(len(model.x1_track)==model.max_iterations)
-		self.assertTrue(len(model.x2_track)==model.max_iterations)
+		self.assertTrue(len(model.x1_track)==model.max_iterations+1)
+		self.assertTrue(len(model.x2_track)==model.max_iterations+1)
 
 		model = TwoQVoterModel(N=100, S=(25,25), Z=(25,25), q=(1,2), rho=0.5)
 		self.assertIsInstance(model.x1_track, list)
@@ -62,6 +62,15 @@ class TestInfiniteModelConstruction(TestCase):
 class TestFiniteMethods(TestCase):
 	"""Testing methods associated with the finite model."""
 
+	def setUp(self):
+		model1 = TwoQVoterModel(N=100, S=40, Z=10, q=(1,2), rho=0.1)
+		model2 = TwoQVoterModel(N=100, S=30, Z=20, q=(1,2), rho=0.1)
+		model3 = TwoQVoterModel(N=100, S=(40, 20), Z=(15, 25), q=(1,2), rho=0.1)
+		self.models = [model1, model2, model3]
+
+	def tearDown(self):
+		self.models = None
+
 	def test_diffision_matrix(self):
 		pass
 
@@ -72,13 +81,24 @@ class TestFiniteMethods(TestCase):
 		pass
 
 	def test_run_iterations(self):
-		pass
+		for model in self.models:
+			model.run_iterations(500)
+			assert all([x >= 0 for x in model.x1_track])
+			assert all([x <= model.s[0] for x in model.x1_track])
+			assert all([x >= 0 for x in model.x2_track])
+			assert all([x <= model.s[1] for x in model.x2_track])
 
 	def test_angular_velocity(self):
 		pass
 
 class TestInfiniteMethods(TestCase):
 	"""Testing methods associated with the finite model."""
+
+	def test_q_eff(self):
+		pass
+
+	def test_z_c(self):
+		pass
 
 	def test_drift_matrix(self):
 		pass

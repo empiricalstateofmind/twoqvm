@@ -7,6 +7,8 @@ from scipy.linalg import eigvals
 # TO DO
 # 1. TESTS
 # 2. Switching Dynamics Theory
+# 3. Extract out array methods (angular momentum, switching, e.t.c)
+# 4. Add rescaling methods (x1*=x2*, and x1/s1, x2/s2)
 
 
 class InfiniteMethods(object):
@@ -109,6 +111,18 @@ class InfiniteMethods(object):
                       [-X2, mu**self.q[1] + (1-mu)**self.q[1] - X2]])
         return F
 
+    @property
+    def q_eff(self):
+        """
+        The effective q (for the qVMZ) for the system.
+        """
+        return sum([s*q for s, q in zip(self.s, self.q)])/sum(self.s)
+
+    @property
+    def z_c(self):
+        delta = (self.s[1]-self.s[0])/2
+        return 0.5 - 1/((1-delta)*self.q[0] + (1+delta)*self.q[1])
+
 
 class FiniteMethods(object):
     """ Abstract container for all methods associated with the finite model. """
@@ -137,9 +151,9 @@ class FiniteMethods(object):
         self.dx = 1.0/self.N
 
         if self.max_iterations is not None:
-            self.x1_track = np.zeros(self.max_iterations, dtype=float)
+            self.x1_track = np.zeros(self.max_iterations+1, dtype=float)
             self.x1_track[self.t] = self.x[0]
-            self.x2_track = np.zeros(self.max_iterations, dtype=float)
+            self.x2_track = np.zeros(self.max_iterations+1, dtype=float)
             self.x1_track[self.t] = self.x[1]
             self.update = self._array_update
         else:
@@ -317,12 +331,7 @@ class FiniteMethods(object):
 
         self.x1_track = np.array(self.x1_track)
         self.x2_track = np.array(self.x2_track)
-        if deviations:
-            self.x1_track = self.x1_track - self.x1_track.mean()
-            self.x2_track = self.x2_track - self.x2_track.mean()
-
-        angvec = self.x1_track[:sample_size]*self.x2_track[t:sample_size+t] - self.x1_track[t:sample_size+t]*self.x2_track[:sample_size]
-        return angvec.mean(), angvec.std()
+        return angular_velocity(self.x1_track, self.x2_track, t, sample_size, deviations)
 
     def _generate_transition_matrix(self, sparse=False):
         """
@@ -484,7 +493,7 @@ class FiniteMethods(object):
             df.to_csv("{}.csv".format(filename), index=False)
         return None
 
-    def switching_time(self, xi, lb=None, ub=None):
+    def switching_time(self, xi, lb=None, ub=None, distribution=False):
         """
         Calculates the mean switching time of a species between two values.
 
@@ -505,12 +514,45 @@ class FiniteMethods(object):
             fps = self.fixed_points()
             lb, ub = fps[0][xi], fps[-1][xi]
 
+        if distribution:
+            if xi == 0:
+                return switching_time_dist(self.x1_track, lb, ub) 
+            elif xi == 1:
+                return switching_time_dist(self.x2_track, lb, ub) 
+            else:
+                raise Exception("xi must be 0 (for x1), or 1 (for x2).")
+        else:
+            if xi == 0:
+                return switching_time(self.x1_track, lb, ub) 
+            elif xi == 1:
+                return switching_time(self.x2_track, lb, ub) 
+            else:
+                raise Exception("xi must be 0 (for x1), or 1 (for x2).")
+
+    def switching_periods(self, xi, lb=None, ub=None):
+        """
+        Returns the indices pairs of periods when the timeseries is between two values.
+
+        Args:
+            xi (binary) - which species to consider the switching of, 0 for x1, 1 for x2.
+            lb (float) - lower value
+            up (float) - upper value 
+
+        Returns:
+            swpoints (np.ndarray)
+        """
+
+        if lb is None or ub is None:
+            fps = self.fixed_points()
+            lb, ub = fps[0][xi], fps[-1][xi]
+
         if xi == 0:
-            return switching_time(self.x1_track, lb, ub) 
+            return switching_points(self.x1_track, lb, ub) 
         elif xi == 1:
-            return switching_time(self.x2_track, lb, ub) 
+            return switching_points(self.x2_track, lb, ub) 
         else:
             raise Exception("xi must be 0 (for x1), or 1 (for x2).")
+
 
 class TwoQVoterModel(FiniteMethods, InfiniteMethods):
     """ A class for simulation and analysis of the finite 2qVMZ. """
@@ -536,9 +578,9 @@ class TwoQVoterModel(FiniteMethods, InfiniteMethods):
         """
         self.N = N
         for key, var in zip(['Z', 'S', 'q'], [Z, S, q]):
-            if isinstance(var, int):
+            if isinstance(var, int) or isinstance(var, np.int64):
                 setattr(self, key, (var, var))
-            elif len(var) == 2:
+            elif (isinstance(var, tuple) or isinstance(var, list)) and len(var) == 2:
                 setattr(self, key, var)
             else:
                 raise Exception
@@ -548,7 +590,7 @@ class TwoQVoterModel(FiniteMethods, InfiniteMethods):
         if isinstance(rho, float) or isinstance(rho, int):
             assert (rho >= 0) & (rho <= 1), "Density of +voters needs to be in [0,1]"
             self.rho = (rho, rho)
-        elif len(rho) == 2:
+        elif (isinstance(var, tuple) or isinstance(var, list)) and len(rho) == 2:
             assert (rho[0] >= 0) & (rho[0] <= 1)
             assert (rho[1] >= 0) & (rho[1] <= 1) 
             self.rho = rho
@@ -581,12 +623,12 @@ class InfiniteTwoQVoterModel(InfiniteMethods):
         for key, var in zip(['z', 's', 'q'], [z, s, q]):
             if isinstance(var, float):
                 setattr(self, key, (var, var))
-            elif len(var,) == 2:
+            elif (isinstance(var, tuple) or isinstance(var, list)) and len(var) == 2:
                 setattr(self, key, var)
             else:
                 raise Exception
 
-        assert 1 == sum(self.z) + sum(self.s)
+        assert np.isclose(1, sum(self.z) + sum(self.s))
         return None
 
 
@@ -607,11 +649,102 @@ def switching_time(arr, a1):
     """
     values = ((a >= a2).astype(int) - (a <= a1).astype(int))
     sign = np.sign(values)
-    sz = (sign==0)
+    sz = (sign == 0)
     while sz.any():
-        sign[sz] = np.roll(sign,1)[sz]
-        sz = (sign==0)
+        sign[sz] = np.roll(sign, 1)[sz]
+        sz = (sign == 0)
 
-    signchange = ((np.roll(sign,1) - sign) != 0).astype(int)
+    signchange = ((np.roll(sign, 1) - sign) != 0).astype(int)
     signchange[0] = 0
     return len(a)/signchange.sum()
+
+
+def switching_time_dist(a, a1, a2):
+    """
+    Returns the switching time distribution for an array a between two values.
+
+    Args:
+        arr (np.array) -
+        a1 (float) - lower value
+        a2 (float) - upper value 
+    
+    Returns:
+        dist (np.array) - an array of switching times
+    """
+    
+    values = ((a >= a2).astype(int) - (a <= a1).astype(int)) # Find times
+
+    asign = np.sign(values) # Get sign of values (+1 above a2, -1 below a1)
+    sz = (asign==0) # Find intermediate values
+    while sz.any():
+        asign[sz] = np.roll(asign,1)[sz] # Intermediate values get replaced with what preceeded it.
+        sz = (asign==0)
+
+    signchange = ((np.roll(asign,1) - asign) != 0).astype(int) # Look for sign changes
+    
+    condition = (asign == 1)
+    tops = np.diff(np.where(np.concatenate(([condition[0]],
+                                        condition[:-1] != condition[1:],
+                                        [True])))[0])[::2]
+    
+    condition = (asign == -1)
+    bottoms = np.diff(np.where(np.concatenate(([condition[0]],
+                                        condition[:-1] != condition[1:],
+                                        [True])))[0])[::2]
+    return np.concatenate([tops, bottoms])
+
+def _zero_runs(a):
+    """
+    Returns the indices of the start and end of a run of zeros of an array.
+
+    Args:
+        a (np.array) - 
+
+    Returns:
+        ranges (np.ndarray) - indices pairs to mark the start and end of a run of zeros in a.
+    """
+    
+    # Creates an array which is 1 where a=0, and pads the ends with a 0.
+    iszero = np.concatenate(([0], np.equal(a,0).view(np.int8), [0])) 
+    absdiff = np.abs(np.diff(iszero))
+    
+    ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
+    return ranges
+
+def switching_points(a, a1, a2):
+    """Returns indices pairs of the transitional periods of a between two values.
+
+    Args:
+        arr (np.array) -
+        a1 (float) - lower value
+        a2 (float) - upper value 
+
+    Returns:
+        swpoints (np.ndarray) - indices pairs to mark the start and end of a switch from a1 to a2.
+    """
+    values = ((a >= a2).astype(int) - (a <= a1).astype(int))
+    zeros = _zero_runs(values)
+
+    swpoints = zeros[np.abs(values[zeros[:, 0]-1] - values[zeros[:, 1]+1]) == 2]
+    return swpoints
+
+def angular_velocity(x1, x2, t, sample_size, deviations=True):
+    """ 
+    Calculates the angular velocity for a given t.
+
+    This is given by the correlation <x1(s)x2(s+t)> - <x1(s+t)x2(s)>.
+    The equivalent can be derived for the deviations from the mean.
+
+    Args:
+        x1, x2 (np.array) - Timeseries for x1, x2.
+        t (int) - Time difference which correlation is calculated over.
+        sample_size - The number of samples used to average over (max = number of iterations - sample_size - t).
+        deviations (bool) - If True, use the deviations from the mean rather than true values.
+    """
+
+    if deviations:
+        x1 = x1 - x1.mean()
+        x2 = x2 - x2.mean()
+
+    angvec = x1[:sample_size]*x2[t:sample_size+t] - x1[t:sample_size+t]*x2[:sample_size]
+    return angvec.mean(), angvec.std()

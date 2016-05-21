@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 from numpy import sqrt, exp
+from numpy.linalg import eigvals, matrix_power
 from scipy.optimize import brentq
-from scipy.linalg import eigvals
+
 
 # TO DO
 # 1. TESTS
@@ -756,11 +757,15 @@ def switching_points(arr, a1, a2):
     values = ((arr >= a2).astype(int) - (arr <= a1).astype(int))
     zeros = _zero_runs(values)
 
-    swpoints = zeros[np.abs(values[zeros[:, 0]-1] - values[zeros[:, 1]+1]) == 2]
+    lower = np.maximum(zeros[:, 0]-1, 0)
+    upper = np.minimum(zeros[:, 1]+1, len(zeros)-1)
+
+    swpoints = zeros[np.abs(values[lower] - values[upper]) == 2]
     return swpoints
 
+
 def angular_velocity(x1, x2, t, sample_size, deviations=True):
-    """ 
+    """
     Calculates the angular velocity for a given t.
 
     This is given by the correlation <x1(s)x2(s+t)> - <x1(s+t)x2(s)>.
@@ -771,6 +776,9 @@ def angular_velocity(x1, x2, t, sample_size, deviations=True):
         t (int) - Time difference which correlation is calculated over.
         sample_size - The number of samples used to average over (max = max(len(x1),len(x2)) - sample_size - t).
         deviations (bool) - If True, use the deviations from the mean rather than true values.
+
+    Returns:
+        angvec_mean, angvec_std (float, float)
     """
 
     if deviations:

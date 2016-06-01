@@ -10,9 +10,9 @@ def switching_time(arr, a1, a2):
     to the upper.
 
     Args:
-        arr (np.array) -
-        a1 (float) - lower value
-        a2 (float) - upper value
+        arr (np.array) - time series array.
+        a1 (float) - lower value.
+        a2 (float) - upper value.
 
     Returns:
         time (float) - mean switching time.
@@ -34,12 +34,12 @@ def switching_time_dist(arr, a1, a2):
     Returns the switching time distribution for an array arr between two values.
 
     Args:
-        arr (np.array) -
-        a1 (float) - lower value
-        a2 (float) - upper value
+        arr (np.array) - time series array.
+        a1 (float) - lower value.
+        a2 (float) - upper value.
 
     Returns:
-        dist (np.array) - an array of switching times
+        dist (np.array) - an array of switching times.
     """
     values = ((arr >= a2).astype(int) - (arr <= a1).astype(int))  # Find times
 
@@ -66,7 +66,7 @@ def _zero_runs(arr):
     Returns the indices of the start and end of a run of zeros of an array.
 
     Args:
-        arr (np.array) -
+        arr (np.array) - time series array.
 
     Returns:
         ranges (np.ndarray) - indices pairs to mark the start and end of a run of zeros in arr.
@@ -84,9 +84,9 @@ def switching_points(arr, a1, a2):
     """Returns indices pairs of the transitional periods of a between two values.
 
     Args:
-        arr (np.array) -
-        a1 (float) - lower value
-        a2 (float) - upper value
+        arr (np.array) - time series array.
+        a1 (float) - lower value.
+        a2 (float) - upper value.
 
     Returns:
         swpoints (np.ndarray) - indices pairs to mark the start and end of a switch from a1 to a2.
@@ -128,44 +128,74 @@ def angular_velocity(x1, x2, t, sample_size, deviations=True):
 
 
 def mean_switching_time_estimate(N, a, b, z, q, kind):
+    """ Estimates the mean switching time using one of two methods.
 
-    if kind.lower() == 'effective':
+    Args:
+        N (int) - system size.
+        a (float) - lower bound.
+        b (float) - upper bound.
+        z (float) - density of zealots
+        q (float) - q for for population
+        kind (bool) - choice of 'effective' or 'theta' (see notes)
+
+    Notes:
+        There are two methods available:
+            'effective' - translates the system to a single population with an effective
+                          q and calculates the corresponding switching time.
+                          Reasonable approximation near z_c.
+            'theta' - assumes the dynamic moves along the path of least resistance,
+                      resulting in a lower bound for the switching time.
+    Returns:
+        mean_switching_time (float)
+        """
+
+    if kind.lower() == 'theta':
 
         def x2(x1, s, q1=1, q2=2):
+            """ x2 along the line theta1=theta2. """
             return s / (1 + (s / x1 - 1) ** (q1 / q2))
 
         def Tp(x1, z, q):
+            """ Forward rate. """
             s = (1 - 2 * z) / 2
             return (s - x1) * (z + x1 + x2(x1, s)) ** q
 
         def Tm(x1, z, q):
+            """ Backwards rate. """
             s = (1 - 2 * z) / 2
             return x1 * (1 - z - x1 - x2(x1, s)) ** q
-    elif kind.lower() == 'theta':
+
+    elif kind.lower() == 'effective':
 
         def Tp(x, z, q):
+            """ Forward rate. """
             return ((1 - 2 * z) - x) * (x + z) ** q
 
         def Tm(x, z, q):
+            """ Backwards rate. """
             return x * ((1 - 2 * z) - x + z) ** q
 
     return _full(N, a, b, z, q)
 
 
 def _phi(v, a, z, q):
+    """ Component of switching time calculation. """
     f = lambda u, z, q: (Tm(u, z, q) - Tp(u, z, q)) / (Tm(u, z, q) + Tp(u, z, q))
     return -2 * quad(f, a, v, args=(z, q))[0]
 
 
 def _inner(v, N, z, q, lb):
+    """ Component of switching time calculation. """
     return np.exp(N * _phi(v, lb, z, q)) / (Tp(v, z, q) + Tm(v, z, q))
 
 
 def _outer(y, N, z, q, lb):
+    """ Component of switching time calculation. """
     return np.exp(-N * _phi(y, lb, z, q))
 
 
 def _full(N, a, b, z, q):
+    """ Returns the switching time between two points. """
     return 2 * N * \
            dblquad(lambda x, y, z, q: _inner(x, N, z, q, a) * _outer(y, N, z, q, a), a, b, lambda y: a, lambda y: y,
                    args=(z, q))[0]

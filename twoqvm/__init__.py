@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 from numpy import sqrt, exp
 from numpy.linalg import eigvals, matrix_power
@@ -6,22 +5,11 @@ from scipy.optimize import brentq
 
 from .functions import *
 
-# TO DO
-# 1. TESTS
-# 2. Add rescaling methods (x1*=x2*, and x1/s1, x2/s2)
-
 __all__ = ['TwoQVoterModel', 'InfiniteTwoQVoterModel']
 
 class InfiniteMethods(object):
     """ 
-    Abstract container for all methods associated with the infinite model. 
-
-    Methods:
-        fixed_points() - Returns the fixed points of the system.
-
-    Properties:
-        F - The linear stability matrix about the stable fixed point.
-
+    Abstract container for all methods associated with the infinite model.
     """
 
     @staticmethod
@@ -30,12 +18,12 @@ class InfiniteMethods(object):
         Calculates the intermediate parameter rho.
 
         Args:
-            xi (float) - 
-            si (float) -
-            qi (float/int) - 
+            xi (float) - density of of positive si agents.
+            si (float) - total density of si agents.
+            qi (float/int) - associated qi with population of si agents.
         
         Returns:
-            rho (float) -
+            rho (float) - intermediate parameter
         """
         return (si / xi - 1) ** (1 / qi)
 
@@ -45,12 +33,12 @@ class InfiniteMethods(object):
         Calculates xi from the parameter rho.
 
         Args:
-            rho (float) - 
-            si (float) -
-            qi (float/int) - 
+            rho (float) - intermediate parameter.
+            si (float) - total density of si agents.
+            qi (float/int) - associated qi with population of si agents.
         
         Returns:
-            xi (float) -
+            xi (float) - density of positive si agents
         """
         return si / (1 + rho ** qi)
 
@@ -103,6 +91,7 @@ class InfiniteMethods(object):
     def F(self):
         """
         The linear stability matrix F at the stable fixed point.
+        Note: This will give F at the lower stable fixed point when there are two.
         """
         (x1, x2) = self.fixed_points()[0]
         mu = self.z[1] + x1 + x2
@@ -137,12 +126,6 @@ class FiniteMethods(object):
         Calculates densities from given integer values. 
         Sets the discrete density increment corresponding to a change in sign.
         Prescribes initial condition and creates list for tracking simulation.
-
-        Args:
-            None
-
-        Returns:
-            None
         """
 
         self.t = 0
@@ -172,8 +155,8 @@ class FiniteMethods(object):
         Loads a time series from file.
 
         Args:
-            filename (str) - 
-            var_names (str tuple) -
+            filename (str) - filename/path to file.
+            var_names (str tuple) - dictionary keys to unpack to x1_track, x2_track.
 
         Returns:
             None
@@ -187,8 +170,8 @@ class FiniteMethods(object):
         Loads a stationary distribution from file.
 
         Args:
-            filename (str) - 
-            var_name (str) -
+            filename (str) - filename/path to file.
+            var_name (str) - variable name to unpack X.
 
         Returns:
             None
@@ -216,9 +199,6 @@ class FiniteMethods(object):
     def _set_transition_matrix(self):
         """
         Calculates the transition probabilities for use in the simulation.
-
-        Args:
-            None
 
         Returns:
             None
@@ -289,6 +269,7 @@ class FiniteMethods(object):
     def D(self):
         """
         The linear diffusion matrix D at the stable fixed point.
+        Note: If there are two stable fixed points, this will be D around the lower FP.
         """
         (x1, x2) = self.fixed_points()[0]
         mu = self.z[1] + x1 + x2
@@ -323,10 +304,10 @@ class FiniteMethods(object):
         Currently restricted to symmetric zealotry - needs generalising.
 
         Args:
-            t_range (iterable) - 
+            t_range (iterable) - the values of t to calculate the lagged two-point correlation.
 
         Returns:
-            t_range, ang_mo (np.array, np.array) - 
+            t_range, ang_mo (np.array, np.array) - the ts and corresponding correlations.
         """
 
         F = self.F
@@ -368,10 +349,18 @@ class FiniteMethods(object):
         Generates the transition matrix for the dynamics. 
 
         Args:
-            sparse (bool) -
+            sparse (bool) - If sparse will use scipy sparse matrix (slow).
 
         Returns:
-            P - 
+            P - the transition matrix.
+
+        Note:
+            P is encoded as
+                    P((0,0)) P((0,1)) P((0,2)) ...
+            P((0,0))
+            P((0,1))
+            P((0,2))
+              ...
         """
 
         S1, S2 = self.S[0], self.S[1]
@@ -381,13 +370,6 @@ class FiniteMethods(object):
             P = sp.dok_matrix(((S1 + 1) ** 2, (S2 + 1) ** 2), dtype=np.float)
         else:
             P = np.zeros(shape=((S1 + 1) ** 2, (S2 + 1) ** 2), dtype=np.float)
-
-        # P is encoded as 
-        #           P((0,0)) P((0,1)) P((0,2)) ... 
-        # P((0,0))
-        # P((0,1))
-        # P((0,2))
-        #  ...
 
         for i in range((S1 + 1) ** 2):
             for j in range((S2 + 1) ** 2):
@@ -413,13 +395,13 @@ class FiniteMethods(object):
         """Calculates the stationary distribution of the model.
 
         Args:
-            iterations (int) - 
-            x (array) -
-            filename (str) -
-            sparse (bool) -
+            iterations (int) - number of iterations of P to calculate (2^iterations).
+            x (array) - initial distribution (default: uniform).
+            filename (str) - filename/path to save distribution.
+            sparse (bool) - if True, use scipy sparse matrices for P (slow).
 
         Returns:
-            X
+            X (np.ndarray) - the stationary distribution.
         """
 
         P = self._generate_transition_matrix(sparse)
@@ -455,11 +437,11 @@ class FiniteMethods(object):
         Calculates the stationary probability currents.
 
         Args:
-            iterations -
-            filename - 
+            iterations (int) - number of iterations of P to calculate (2^iterations).
+            filename (str) - filename/path to load a previously calculated stationary distribution.
 
         Returns:
-            C -
+            U,V - currents at each point in the configuration space in each direction.
         """
 
         if filename is not None:
@@ -496,11 +478,11 @@ class FiniteMethods(object):
 
     @staticmethod
     def convert_to_x_pair(i, S1, S2):
-        """ """
+        """ Converts an index to the corresponding S in the transition matrix formulation. """
         return i // (S1 + 1), i % (S1 + 1)
 
     def current(self, X1, X2, P):
-        """ """
+        """ Calculates the current at a point X1, X2. """
         return (-(self._w_1_plus(X1, X2) - self._w_1_minus(X1, X2)) * P[X1, X2],
                 (self._w_2_plus(X1, X2) - self._w_2_minus(X1, X2)) * P[X1, X2])
 
@@ -509,8 +491,8 @@ class FiniteMethods(object):
         Saves the time series (and parameter values) to file.
 
         Args:
-            filename (str) - 
-            compressed (bool) -
+            filename (str) - filename/path to save file (without extension).
+            compressed (bool) - If True, saves as a .npz file.
 
         Returns:
             None
@@ -546,9 +528,9 @@ class FiniteMethods(object):
 
         Args:
             xi (binary) - which species to consider the switching of, 0 for x1, 1 for x2.
-            lb (float) - lower value
-            ub (float) - upper value
-            distribution (bool) -
+            lb (float) - lower value.
+            ub (float) - upper value.
+            distribution (bool) - If True, returns the distribution of switching times.
 
         Returns:
             time (float) - mean switching time.
@@ -583,11 +565,11 @@ class FiniteMethods(object):
 
         Args:
             xi (binary) - which species to consider the switching of, 0 for x1, 1 for x2.
-            lb (float) - lower value
-            ub (float) - upper value
+            lb (float) - lower value.
+            ub (float) - upper value.
 
         Returns:
-            swpoints (np.ndarray)
+            swpoints (np.ndarray) - pairs of indices (t1,t2) between which the time series switches between two values.
         """
 
         if lb is None or ub is None:
@@ -605,7 +587,6 @@ class FiniteMethods(object):
 class TwoQVoterModel(FiniteMethods, InfiniteMethods):
     """ A class for simulation and analysis of the finite 2qVMZ. """
 
-    # noinspection PyUnboundLocalVariable,PyUnboundLocalVariable,PyUnboundLocalVariable,PyUnboundLocalVariable,PyUnboundLocalVariable
     def __init__(self, N, Z, S, q, rho, *args, **kwargs):
         """ 
         Initialises a finite version of the 2qZM. 
@@ -624,6 +605,17 @@ class TwoQVoterModel(FiniteMethods, InfiniteMethods):
         Note: 
             1. For the qVMZ, set S2 = 0. Setting S1 = 0 will not work.
             2. max_iterations solves memory issues and saves computational effect for longer runs.
+
+        Examples:
+            1.
+                model = TwoQVoterModel(N=100, S=20, Z=30, q=(1,2), rho=0.5)
+                model.run_iterations(1000)
+                plt.plot(model.x1_track)
+                plt.plot(model.x2_track)
+
+            2.
+                model = TwoQVoterModel(N=100, S=(15,25), Z=(25,35), q=(1,2), rho=(0,1))
+                fps = model.fixed_points()
         """
         self.N = N
         for key, var in zip(['Z', 'S', 'q'], [Z, S, q]):
@@ -667,6 +659,11 @@ class InfiniteTwoQVoterModel(InfiniteMethods):
 
         Note:
             For the qVMZ, set s2 = 0. Setting s1 = 0 will not work.
+
+        Examples:
+            1.
+                model = InfiniteTwoQVoterModel(s=0.3, z=0.2, q=(1,2))
+                fps = model.fixed_points()
         """
         for key, var in zip(['z', 's', 'q'], [z, s, q]):
             if isinstance(var, float):

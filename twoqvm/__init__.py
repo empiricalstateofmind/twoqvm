@@ -150,18 +150,18 @@ class FiniteMethods(object):
         self.s = (self.S[0] / self.N, self.S[1] / self.N)
         self.z = (self.Z[0] / self.N, self.Z[1] / self.N)
 
-        self.x = (self.rho[0] * self.s[0], self.rho[1] * self.s[1])
+        self.x0 = (self.rho[0] * self.s[0], self.rho[1] * self.s[1])
         self.dx = 1.0 / self.N
 
         if self.max_iterations is not None:
             self.x1_track = np.zeros(self.max_iterations + 1, dtype=float)
-            self.x1_track[self.t] = self.x[0]
+            self.x1_track[self.t] = self.x0[0]
             self.x2_track = np.zeros(self.max_iterations + 1, dtype=float)
-            self.x1_track[self.t] = self.x[1]
+            self.x2_track[self.t] = self.x0[1]
             self.update = self._array_update
         else:
-            self.x1_track = [self.x[0]]
-            self.x2_track = [self.x[1]]
+            self.x1_track = [self.x0[0]]
+            self.x2_track = [self.x0[1]]
             self.update = self._append_update
         self._set_transition_matrix()
 

@@ -127,7 +127,7 @@ def angular_velocity(x1, x2, t, sample_size, deviations=True):
     return angvec.mean(), angvec.std()
 
 
-def mean_switching_time_estimate(N, a, b, z, q, kind)
+def mean_switching_time_estimate(N, a, b, z, q, kind):
 
     if kind.lower() == 'effective':
 

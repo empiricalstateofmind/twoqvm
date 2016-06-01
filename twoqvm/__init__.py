@@ -179,7 +179,7 @@ class FiniteMethods(object):
             None
         """
         data = np.load(filename)
-        self.x1_track, self.x2_track = data[var_names[0]], data[var_names[0]]
+        self.x1_track, self.x2_track = data[var_names[0]], data[var_names[1]]
         return None
 
     def load_stationary_distribution(self, filename, var_name='X'):
@@ -194,7 +194,7 @@ class FiniteMethods(object):
             None
         """
         data = np.load(filename)
-        self.X = data[var_names]
+        self.X = data[var_name]
         return None
 
     def _append_update(self, xi, val):
@@ -281,7 +281,7 @@ class FiniteMethods(object):
         """
         if verbose:
             for _i in range(num_iterations):
-                print(_i, end="\r")
+                print(_i, end='\r')
                 self.run_iteration()
         else:
             for _i in range(num_iterations):
@@ -383,7 +383,14 @@ class FiniteMethods(object):
             import scipy.sparse as sp
             P = sp.dok_matrix(((S1 + 1) ** 2, (S2 + 1) ** 2), dtype=np.float)
         else:
-            P = np.zeros(shape=((S1 + 1) ** 2, (S2 + 1) ** 2))
+            P = np.zeros(shape=((S1 + 1) ** 2, (S2 + 1) ** 2), dtype=np.float)
+
+        # P is encoded as 
+        #           P((0,0)) P((0,1)) P((0,2)) ... 
+        # P((0,0))
+        # P((0,1))
+        # P((0,2))
+        #  ...
 
         for i in range((S1 + 1) ** 2):
             for j in range((S2 + 1) ** 2):
@@ -400,6 +407,8 @@ class FiniteMethods(object):
 
         for i, val in enumerate(1 - P.sum(axis=1)):
             P[i, i] = val
+
+        P = P / P.sum(axis=1)
 
         return P
 

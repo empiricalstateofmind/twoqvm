@@ -519,15 +519,16 @@ class FiniteMethods(object):
             filename = "{N}N_{S1}S1_{S2}S2_{ZM}ZM_{ZP}ZP_{q1}{q2}".format(**parameters)
 
         if compressed:
-            self.x1_track = (np.array(self.x1_track) * self.N + 0.5).astype(int)
-            self.x2_track = (np.array(self.x2_track) * self.N + 0.5).astype(int)
+            self.x1_track = np.array(self.x1_track, dtype=np.uint16)
+            self.x2_track = np.array(self.x2_track, dtype=np.uint16)
             np.savez_compressed("{}.npz".format(filename), x1_track=self.x1_track, x2_track=self.x2_track,
                                 parameters=parameters)
         else:
-            self.x1_track = np.array(self.x1_track) * self.N + 0.5
-            self.x2_track = np.array(self.x2_track) * self.N + 0.5
+            self.x1_track = np.array(self.x1_track, dtype=np.uint16)
+            self.x2_track = np.array(self.x2_track, dtype=np.uint16)
 
-            df = pd.DataFrame({'t': np.arange(len(self.x1_track)), 'x1': self.x1_track, 'x2': self.x2_track}, dtype=int)
+            df = pd.DataFrame({'t': np.arange(len(self.x1_track)), 'x1': self.x1_track, 'x2': self.x2_track},
+                              dtype=int)
             df.to_csv("{}.csv".format(filename), index=False)
         return None
 

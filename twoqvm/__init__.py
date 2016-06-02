@@ -134,21 +134,34 @@ class FiniteMethods(object):
         self.z = (self.Z[0] / self.N, self.Z[1] / self.N)
 
         self.x0 = (self.rho[0] * self.s[0], self.rho[1] * self.s[1])
+        self.x = self.x0
         self.dx = 1.0 / self.N
 
         if self.max_iterations is not None:
-            self.x1_track = np.zeros(self.max_iterations + 1, dtype=float)
-            self.x1_track[self.t] = self.x0[0]
-            self.x2_track = np.zeros(self.max_iterations + 1, dtype=float)
-            self.x2_track[self.t] = self.x0[1]
+            self.x1_track = np.zeros(self.max_iterations + 1, dtype=np.uint16)
+            self.x1_track[self.t] = self._to_int(self.x0[0])
+            self.x2_track = np.zeros(self.max_iterations + 1, dtype=np.uint16)
+            self.x2_track[self.t] = self._to_int(self.x0[1])
             self.update = self._array_update
         else:
-            self.x1_track = [self.x0[0]]
-            self.x2_track = [self.x0[1]]
+            self.x1_track = [self._to_int(self.x0[0])]
+            self.x2_track = [self._to_int(self.x0[1])]
             self.update = self._append_update
         self._set_transition_matrix()
 
         return None
+
+    def _to_int(self, density):
+        """
+        Coverts a density into an integer.
+
+        Args:
+            density (float):
+
+        Returns:
+            number (int):
+        """
+        return int(density * self.N + 0.5)
 
     def load_timeseries(self, filename, var_names=('x1_track', 'x2_track')):
         """
@@ -203,8 +216,6 @@ class FiniteMethods(object):
         Returns:
             None
         """
-        self.x = (self.x1_track[self.t], self.x2_track[self.t])
-
         mu1 = self.z[0] + self.s[0] + self.s[1] - (self.x[0] + self.x[1])
         mu2 = self.z[1] + self.x[0] + self.x[1]
 
@@ -227,20 +238,18 @@ class FiniteMethods(object):
         self.t += 1
 
         if ix == 0:
-            self.update(0, self.x1_track[self.t - 1] + self.dx)
-            self.update(1, self.x2_track[self.t - 1])
+            self.x = (self.x[0] + self.dx, self.x[1])
         elif ix == 1:
-            self.update(0, self.x1_track[self.t - 1] - self.dx)
-            self.update(1, self.x2_track[self.t - 1])
+            self.x = (self.x[0] - self.dx, self.x[1])
         elif ix == 2:
-            self.update(0, self.x1_track[self.t - 1])
-            self.update(1, self.x2_track[self.t - 1] + self.dx)
+            self.x = (self.x[0], self.x[1] + self.dx)
         elif ix == 3:
-            self.update(0, self.x1_track[self.t - 1])
-            self.update(1, self.x2_track[self.t - 1] - self.dx)
+            self.x = (self.x[0], self.x[1] - self.dx)
         else:
-            self.update(0, self.x1_track[self.t - 1])
-            self.update(1, self.x2_track[self.t - 1])
+            return None
+
+        self.update(0, self._to_int(self.x[0]))
+        self.update(1, self._to_int(self.x[1]))
 
         self._set_transition_matrix()
         return None

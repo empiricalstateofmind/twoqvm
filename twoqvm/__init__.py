@@ -492,8 +492,22 @@ class FiniteMethods(object):
 
     def current(self, X1, X2, P):
         """ Calculates the current at a point X1, X2. """
-        return (-(self._w_1_plus(X1, X2) - self._w_1_minus(X1, X2)) * P[X1, X2],
-                (self._w_2_plus(X1, X2) - self._w_2_minus(X1, X2)) * P[X1, X2])
+        # return (-(self._w_1_plus(X1, X2) - self._w_1_minus(X1, X2)) * P[X1, X2],
+        #         (self._w_2_plus(X1, X2) - self._w_2_minus(X1, X2)) * P[X1, X2])
+
+        k1 = (self._w_1_plus(X1, X2) - self._w_1_minus(X1, X2)) * P[X1, X2]
+        if X1 >= 1:
+            k1 += self._w_1_plus(X1 - 1, X2) * P[X1 - 1, X2]
+        if X1 <= self.S[0] - 1:
+            k1 += self._w_1_minus(X1 + 1, X2) * P[X1 + 1, X2]
+
+        k2 = (self._w_2_plus(X1, X2) - self._w_2_minus(X1, X2)) * P[X1, X2]
+        if X2 >= 1:
+            k2 += self._w_2_plus(X1, X2 - 1) * P[X1, X2 - 1]
+        if X2 <= self.S[1] - 1:
+            k2 += self._w_2_minus(X1, X2 + 1) * P[X1, X2 + 1]
+
+        return (k1, k2)
 
     def save_timeseries(self, filename=None, compressed=True):
         """

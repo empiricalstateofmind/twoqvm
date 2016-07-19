@@ -42,6 +42,20 @@ class InfiniteMethods(object):
         """
         return si / (1 + rho ** qi)
 
+    @staticmethod
+    def z_critical(q1, q2):
+        """
+        Calculates the critical value of z in the symmetric case s1=s2.
+
+        Args:
+            q1, q2 (int) - susceptible types (number of neighbour queries).
+
+        Returns:
+            z_c (float) - the critical value of z.
+        """
+
+        return 0.5*(q1 + q2 - 2)/(q1 + q2)
+
     def _fixed_point_function(self, xi, species):
         """
         The fixed point function for xi. Zeros of this function are the fixed points for xi.

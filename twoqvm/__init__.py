@@ -7,7 +7,6 @@ from .functions import *
 
 __all__ = ['TwoQVoterModel', 'InfiniteTwoQVoterModel']
 
-
 class InfiniteMethods(object):
     """ 
     Abstract container for all methods associated with the infinite model.
@@ -324,11 +323,11 @@ class FiniteMethods(object):
         L = (2 / F.trace()) * (F[0, 1] * D[1, 1] - F[1, 0] * D[0, 0])
         l1, l2 = eigvals(F).real
         delta = sqrt(F.trace() ** 2 - 4 * np.linalg.det(F))
-        ctau = (L / delta)
+        #ctau = (L / delta)
 
         ang_mo = []
         for tau in t_range:
-            ang_mo.append(ctau * (exp(-l1 * tau) - exp(-l2 * tau)) / (l1 - l2))
+            ang_mo.append(L * (exp(-l1 * tau) - exp(-l2 * tau)) / (l1 - l2))
 
         return np.array(t_range), -np.array(ang_mo)
 
@@ -458,8 +457,7 @@ class FiniteMethods(object):
             x = np.ones((self.S[0] + 1, self.S[1] + 1)) / ((self.S[0] + 1) * (self.S[1] + 1))
             self.X = self.calculate_stationary_distribution(iterations, x=x.flatten())[2]
 
-        U, V = np.array(np.fromfunction(self.current, shape=self.X.shape, dtype=int, P=self.X))
-        return U.T, V.T
+        return np.array(np.fromfunction(self.current, shape=self.X.shape, dtype=int, P=self.X))
 
     def _w_1_plus(self, X1, X2):
         """Probability current of x1 -> x1 + 1."""
@@ -492,13 +490,16 @@ class FiniteMethods(object):
 
     def current(self, X1, X2, P):
         """ Calculates the current at a point X1, X2. """
+        # return (-(self._w_1_plus(X1, X2) - self._w_1_minus(X1, X2)) * P[X1, X2],
+        #         (self._w_2_plus(X1, X2) - self._w_2_minus(X1, X2)) * P[X1, X2])
+
         k1 = (self._w_1_plus(X1, X2) - self._w_1_minus(X1, X2)) * P[X1, X2]
-        k1 += (X1 >= 1) * (self._w_1_plus(X1 - 1, X2) * P[np.maximum((X1 - 1), 0), X2])
-        k1 -= (X1 <= self.S[0] - 1) * (self._w_1_minus(X1 + 1, X2) * P[np.minimum((X1 + 1), self.S[0]), X2])
+        k1 += (X1 >= 1) * (self._w_1_plus(X1 - 1, X2) * P[np.maximum((X1 - 1),0), X2])
+        k1 -= (X1 <= self.S[0] - 1) * (self._w_1_minus(X1 + 1, X2) * P[np.minimum((X1 + 1),self.S[0]), X2])
 
         k2 = (self._w_2_plus(X1, X2) - self._w_2_minus(X1, X2)) * P[X1, X2]
-        k2 += (X2 >= 1) * (self._w_2_plus(X1, X2 - 1) * P[X1, np.maximum((X2 - 1), 0)])
-        k2 -= (X2 <= self.S[1] - 1) * (self._w_2_minus(X1, X2 + 1) * P[X1, np.minimum((X2 + 1), self.S[1])])
+        k2 += (X2 >= 1) * (self._w_2_plus(X1, X2 - 1) * P[X1, np.maximum((X2 - 1),0)])
+        k2 -= (X2 <= self.S[1] - 1) * (self._w_2_minus(X1, X2 + 1) * P[X1, np.minimum((X2 + 1),self.S[1])])
         return k1, k2
 
     def save_timeseries(self, filename=None, compressed=True):
